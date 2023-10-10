@@ -28,6 +28,9 @@ from .const import DOMAIN
 DEFAULT_NAME = "LG TV Remote"
 
 CONF_ON_ACTION = "turn_on_action"
+CONF_SOURCES = "sources"
+CONF_INPUT_SOURCE_TYPE = "input_source_type"
+CONF_INPUT_SOURCE_INDEX = "input_source_index"
 
 SUPPORT_LGTV = (
     MediaPlayerEntityFeature.PAUSE
@@ -49,6 +52,18 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Required(CONF_HOST): cv.string,
         vol.Optional(CONF_ACCESS_TOKEN): vol.All(cv.string, vol.Length(max=6)),
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
+        vol.Optional(CONF_SOURCES, default=list): vol.All(
+            cv.ensure_list,
+            [
+                vol.Schema(
+                    {
+                        vol.Required(CONF_NAME): cv.string,
+                        vol.Required(CONF_INPUT_SOURCE_INDEX): cv.positive_int,
+                        vol.Required(CONF_INPUT_SOURCE_TYPE): cv.positive_int,
+                    }
+                )
+            ]
+        )
     }
 )
 
@@ -65,11 +80,15 @@ def setup_platform(
     access_token = config.get(CONF_ACCESS_TOKEN)
     name = config[CONF_NAME]
     on_action = config.get(CONF_ON_ACTION)
+    sources = [
+        (src[CONF_INPUT_SOURCE_TYPE], src[CONF_INPUT_SOURCE_INDEX], src[CONF_NAME])
+        for src in config[CONF_SOURCES]
+    ]
 
     client = LgNetCastClient(host, access_token)
     on_action_script = Script(hass, on_action, name, DOMAIN) if on_action else None
 
-    add_entities([LgTVDevice(client, name, on_action_script)], True)
+    add_entities([LgTVDevice(client, name, on_action_script, sources)], True)
 
 
 class LgTVDevice(MediaPlayerEntity):
@@ -79,12 +98,14 @@ class LgTVDevice(MediaPlayerEntity):
     _attr_device_class = MediaPlayerDeviceClass.TV
     _attr_media_content_type = MediaType.CHANNEL
 
-    def __init__(self, client, name, on_action_script):
+    def __init__(self, client, name, on_action_script, sources):
         """Initialize the LG TV device."""
         self._client = client
         self._name = name
         self._muted = False
         self._on_action_script = on_action_script
+        self._sources = sources
+        self._current_source = (None, None, None)
         self._volume = 0
         self._channel_id = None
         self._channel_name = ""
@@ -114,6 +135,11 @@ class LgTVDevice(MediaPlayerEntity):
                 if channel_info:
                     channel_info = channel_info[0]
                     channel_id = channel_info.find("major")
+                    self._current_source = (
+                        int(channel_info.find("inputSourceType").text),
+                        int(channel_info.find("inputSourceIdx").text),
+                        channel_info.find("inputSourceName").text
+                    )
                     self._channel_name = channel_info.find("chname").text
                     self._program_name = channel_info.find("progName").text
                     if channel_id is not None:
@@ -168,12 +194,15 @@ class LgTVDevice(MediaPlayerEntity):
     @property
     def source(self):
         """Return the current input source."""
-        return self._channel_name
+        for type, index, name in self._sources:
+            if self._current_source[0] == type and self._current_source[1] == index:
+                return name
+        return self._current_source[2]
 
     @property
     def source_list(self):
         """List of available input sources."""
-        return self._source_names
+        return [source[2] for source in self._sources]
 
     @property
     def media_content_id(self):
@@ -231,7 +260,14 @@ class LgTVDevice(MediaPlayerEntity):
 
     def select_source(self, source: str) -> None:
         """Select input source."""
-        self._client.change_channel(self._channels[source])
+        for type, index, name in self._sources:
+            if name == source:
+                message = self._client.COMMAND % (
+                    self._client._session,
+                    "ChangeInputSource",
+                    "<inputSourceType>%d</inputSourceType><inputSourceIdx>%d</inputSourceIdx>" % (type, index),
+                )
+                self._client._send_to_tv("command", message)
 
     def media_play(self) -> None:
         """Send play command."""
@@ -263,7 +299,7 @@ class LgTVDevice(MediaPlayerEntity):
         for name, channel in self._channels.items():
             channel_id = channel.find("major")
             if channel_id is not None and int(channel_id.text) == int(media_id):
-                self.select_source(name)
+                self._client.change_channel(self._channels[name])
                 return
 
         raise ValueError(f"Invalid media id: {media_id}")
