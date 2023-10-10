@@ -1,6 +1,7 @@
 """Support for LG TV running on NetCast 3 or 4."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any
 
@@ -24,6 +25,8 @@ from homeassistant.helpers.script import Script
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from .const import DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
 
 DEFAULT_NAME = "LG TV Remote"
 
@@ -140,6 +143,7 @@ class LgTVDevice(MediaPlayerEntity):
                         int(channel_info.find("inputSourceIdx").text),
                         channel_info.find("inputSourceName").text
                     )
+                    _LOGGER.debug('Currently active source: type=%d, index=%d, name=%s', *self._current_source)
                     self._channel_name = channel_info.find("chname").text
                     self._program_name = channel_info.find("progName").text
                     if channel_id is not None:
