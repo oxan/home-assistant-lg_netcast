@@ -89,8 +89,8 @@ class LgTVDevice(MediaPlayerEntity):
         self._channel_id = None
         self._channel_name = ""
         self._program_name = ""
-        self._sources = {}
-        self._source_names = []
+        self._channels = {}
+        self._channel_names = []
 
     def send_command(self, command):
         """Send remote control commands to the TV."""
@@ -130,16 +130,16 @@ class LgTVDevice(MediaPlayerEntity):
                         channel_name = channel.find("chname")
                         if channel_name is not None:
                             channel_names.append(str(channel_name.text))
-                    self._sources = dict(zip(channel_names, channel_list))
-                    # sort source names by the major channel number
-                    source_tuples = [
+                    self._channels = dict(zip(channel_names, channel_list))
+                    # sort channel names by the major channel number
+                    channel_tuples = [
                         (k, source.find("major").text)
-                        for k, source in self._sources.items()
+                        for k, source in self._channels.items()
                     ]
-                    sorted_sources = sorted(
-                        source_tuples, key=lambda channel: int(channel[1])
+                    sorted_channels = sorted(
+                        channel_tuples, key=lambda channel: int(channel[1])
                     )
-                    self._source_names = [n for n, k in sorted_sources]
+                    self._channel_names = [n for n, k in sorted_channels]
         except (LgNetCastError, RequestException):
             self._attr_state = MediaPlayerState.OFF
 
@@ -231,7 +231,7 @@ class LgTVDevice(MediaPlayerEntity):
 
     def select_source(self, source: str) -> None:
         """Select input source."""
-        self._client.change_channel(self._sources[source])
+        self._client.change_channel(self._channels[source])
 
     def media_play(self) -> None:
         """Send play command."""
@@ -260,7 +260,7 @@ class LgTVDevice(MediaPlayerEntity):
         if media_type != MediaType.CHANNEL:
             raise ValueError(f"Invalid media type: {media_type}")
 
-        for name, channel in self._sources.items():
+        for name, channel in self._channels.items():
             channel_id = channel.find("major")
             if channel_id is not None and int(channel_id.text) == int(media_id):
                 self.select_source(name)
