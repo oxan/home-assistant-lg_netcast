@@ -144,10 +144,6 @@ class LgTVDevice(MediaPlayerEntity):
                     self._program_name = channel_info.find("progName").text
                     if channel_id is not None:
                         self._channel_id = int(channel_id.text)
-                    if self._channel_name is None:
-                        self._channel_name = channel_info.find("inputSourceName").text
-                    if self._program_name is None:
-                        self._program_name = channel_info.find("labelName").text
 
                 channel_list = client.query_data("channel_list")
                 if channel_list:
