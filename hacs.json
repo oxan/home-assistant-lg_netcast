@@ -1,0 +1,5 @@
+{
+    "homeassistant": "2023.10.0",
+    "name": "lg_netcast",
+    "render_readme": true
+}
